@@ -4256,7 +4256,7 @@
 
 ###########################################################################
 
-(def version "2026-01-09_07-52-49")
+(def version "2026-01-09_08-13-31")
 
 (def usage
   ``
@@ -4348,8 +4348,9 @@
         (c/make-run-update src-paths opts)
         (c/make-run-report src-paths opts))
       ([e f]
+        (l/noten :e)
         (if (dictionary? e)
-          (do (l/noten :e) (e/show e))
+          (e/show e)
           (debug/stacktrace f e "internal "))
         [2 @[]])))
   #
