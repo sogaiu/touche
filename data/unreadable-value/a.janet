@@ -1,0 +1,7 @@
+(comment
+
+  eprintf
+  # =>
+  printf
+
+  )

@@ -1,0 +1,21 @@
+{:name "touche"
+ :url "https://github.com/sogaiu/touche"
+ :repo "git+https://github.com/sogaiu/touche.git"
+
+ :vendored
+ [{:name "some-bundle-bits"
+   :url "https://github.com/sogaiu/some-bundle-bits"
+   :tag "7ddb7ec53a6eb8c81b0c22bb7710a01fff57a759"
+   :paths [["sbb.janet" "bundle/"]]}
+  {:name "jell"
+   :url "https://github.com/sogaiu/jell"
+   :tag "5002ee1176b5e9c6249f02d092de2e0d2a792445"
+   :paths [["jell" "bin/"]]}]
+
+ :binscripts
+ # has `.janet` extension so that importing is possible, e.g. via:
+ #
+ #   (import bin/tche)
+ [{:main "tche.janet"
+   :is-janet true}]}
+

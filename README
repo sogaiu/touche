@@ -1,0 +1,55 @@
+Usage: tche [<file-or-dir>...]
+       tche [-h|--help] [-v|--version]
+
+Test out using comment-hidden expressions...touche!
+
+Parameters:
+
+  <file-or-dir>          path to file or directory
+
+Options:
+
+  -h, --help             show this output
+  -v, --version          show version information
+
+Configuration:
+
+  .tche.jdn              configuration file
+
+Examples:
+
+  Create and run tests in `src/` directory:
+
+  $ tche src
+
+  `tche` can be used via `jpm`, `jeep`, etc. with
+  some one-time setup.  Create a suitable `.tche.jdn`
+  file in a project's root directory and a runner
+  file in a project's `test/` subdirectory (see below
+  for further details).
+
+  Run via `jeep test`:
+
+  $ jeep test
+
+  Run via `jpm test`:
+
+  $ jpm test
+
+  Run using the configuration file via direct
+  invocation:
+
+  $ tche
+
+Example `.tche.jdn` content:
+
+  {# describes what to test - file and dir paths
+   :includes ["src" "bin/my-script"]
+   # describes what to skip - file paths only
+   :excludes ["src/sample.janet"]}
+
+Example runner file `test/trigger-tche.janet`:
+
+  (import ../tche)
+
+  (tche/main)
