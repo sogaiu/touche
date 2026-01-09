@@ -23,6 +23,10 @@
   (def b {:in "make-tests" :args {:in-path in-path :opts opts}})
   #
   (def src (slurp in-path))
+  (def [ok? _] (protect (parse-all src)))
+  (when (not ok?)
+    (break :parse-error))
+  #
   (def test-src (r/rewrite-as-test-file src))
   (when (not test-src)
     (break nil))
@@ -158,8 +162,12 @@
   (default opts @{})
   # create test source
   (def result (make-tests input opts))
-  (when (not result)
-    (break [:no-tests nil nil nil]))
+  (cond
+    (not result)
+    (break [:no-tests nil nil nil])
+    #
+    (= :parse-error result)
+    (break [:parse-error nil nil nil]))
   #
   (def test-path result)
   # run tests and collect output
@@ -168,9 +176,9 @@
   #
   (when (empty? out)
     (def m (lint-and-get-error input))
-    (e/emf (merge b {:locals {:exit-code exit-code :out out :err err}})
-           "possible problem in input source\n  %s%s"
-           input (if m (first m) "")))
+    (if m
+      (break [:lint-error nil nil nil])
+      (break [:test-run-error nil nil nil])))
   #
   (def [test-results test-out] (parse-output out))
   (when-let [unreadable (has-unreadable? test-results)]

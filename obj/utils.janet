@@ -34,3 +34,8 @@
 
   )
 
+(defn u/is-file?
+  [path]
+  #
+  (= :file (os/stat path :mode)))
+
