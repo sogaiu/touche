@@ -7,6 +7,10 @@
    :url "https://github.com/sogaiu/some-bundle-bits"
    :tag "7ddb7ec53a6eb8c81b0c22bb7710a01fff57a759"
    :paths [["sbb.janet" "bundle/"]]}
+  {:name "touche"
+   :url "https://github.com/sogaiu/touche"
+   :tag "f2b667ab6b8a023d48d7d7942969ba6885de25f3"
+   :paths [["tche.janet" "bin/"]]}
   {:name "jell"
    :url "https://github.com/sogaiu/jell"
    :tag "5002ee1176b5e9c6249f02d092de2e0d2a792445"
