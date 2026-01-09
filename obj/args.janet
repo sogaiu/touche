@@ -1,4 +1,5 @@
 (import ./errors :prefix "")
+(import ./utils :prefix "")
 
 (defn a/parse-args
   [args]
@@ -44,21 +45,8 @@
       (not (empty? the-args))
       [the-args @[]]
       # conf file
-      (= :file (os/stat conf-file :mode))
-      (let [src (try (slurp conf-file)
-                  ([e] (e/emf (merge b {:e-via-try e})
-                              "failed to slurp: %s" conf-file)))
-            cnf (try (parse src)
-                  ([e] (e/emf (merge b {:e-via-try e})
-                              "failed to parse: %s" conf-file)))]
-        (when (not cnf)
-          (e/emf b "failed to load: %s" conf-file))
-        #
-        (when (not (dictionary? cnf))
-          (e/emf b "expected dictionary in conf, got: %s" (type cnf)))
-        #
-        [(array ;(get cnf :includes @[]))
-         (array ;(get cnf :excludes @[]))])
+      (u/is-file? conf-file)
+      (u/parse-conf-file conf-file)
       #
       (e/emf b "unexpected result parsing args: %n" args)))
   #

@@ -175,8 +175,7 @@
   (os/rm test-path)
   #
   (when (empty? out)
-    (def m (t/lint-and-get-error input))
-    (if m
+    (if (t/lint-and-get-error input)
       (break [:lint-error nil nil nil])
       (break [:test-run-error nil nil nil])))
   #

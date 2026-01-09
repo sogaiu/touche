@@ -29,6 +29,71 @@
       (eprintf "  e via try: %n" e))))
 
 
+(comment import ./utils :prefix "")
+(comment import ./errors :prefix "")
+
+
+(defn u/parse-path
+  [path]
+  (def revcap-peg
+    ~(sequence (capture (sequence (choice (to (choice "/" `\`))
+                                          (thru -1))))
+               (capture (thru -1))))
+  (when-let [[rev-name rev-dir]
+             (-?>> (string/reverse path)
+                   (peg/match revcap-peg)
+                   (map string/reverse))]
+    [(or rev-dir "") rev-name]))
+
+(comment
+
+  (u/parse-path "/tmp/fun/my.fnl")
+  # =>
+  ["/tmp/fun/" "my.fnl"]
+
+  (u/parse-path "/my.janet")
+  # =>
+  ["/" "my.janet"]
+
+  (u/parse-path "pp.el")
+  # =>
+  ["" "pp.el"]
+
+  (u/parse-path "/")
+  # =>
+  ["/" ""]
+
+  (u/parse-path "")
+  # =>
+  ["" ""]
+
+  )
+
+(defn u/is-file?
+  [path]
+  #
+  (= :file (os/stat path :mode)))
+
+(defn u/parse-conf-file
+  [conf-file]
+  (def b {:in "parse-conf-file" :args {:conf-file conf-file}})
+  #
+  (let [src (try (slurp conf-file)
+              ([e] (e/emf (merge b {:e-via-try e})
+                          "failed to slurp: %s" conf-file)))
+        cnf (try (parse src)
+              ([e] (e/emf (merge b {:e-via-try e})
+                          "failed to parse: %s" conf-file)))]
+    (when (not cnf)
+      (e/emf b "failed to load: %s" conf-file))
+    #
+    (when (not (dictionary? cnf))
+      (e/emf b "expected dictionary in conf, got: %s" (type cnf)))
+    #
+    [(array ;(get cnf :includes @[]))
+     (array ;(get cnf :excludes @[]))]))
+
+
 
 (defn a/parse-args
   [args]
@@ -74,21 +139,8 @@
       (not (empty? the-args))
       [the-args @[]]
       # conf file
-      (= :file (os/stat conf-file :mode))
-      (let [src (try (slurp conf-file)
-                  ([e] (e/emf (merge b {:e-via-try e})
-                              "failed to slurp: %s" conf-file)))
-            cnf (try (parse src)
-                  ([e] (e/emf (merge b {:e-via-try e})
-                              "failed to parse: %s" conf-file)))]
-        (when (not cnf)
-          (e/emf b "failed to load: %s" conf-file))
-        #
-        (when (not (dictionary? cnf))
-          (e/emf b "expected dictionary in conf, got: %s" (type cnf)))
-        #
-        [(array ;(get cnf :includes @[]))
-         (array ;(get cnf :excludes @[]))])
+      (u/is-file? conf-file)
+      (u/parse-conf-file conf-file)
       #
       (e/emf b "unexpected result parsing args: %n" args)))
   #
@@ -3704,47 +3756,6 @@
 (comment import ./rewrite :prefix "")
 
 (comment import ./utils :prefix "")
-(defn u/parse-path
-  [path]
-  (def revcap-peg
-    ~(sequence (capture (sequence (choice (to (choice "/" `\`))
-                                          (thru -1))))
-               (capture (thru -1))))
-  (when-let [[rev-name rev-dir]
-             (-?>> (string/reverse path)
-                   (peg/match revcap-peg)
-                   (map string/reverse))]
-    [(or rev-dir "") rev-name]))
-
-(comment
-
-  (u/parse-path "/tmp/fun/my.fnl")
-  # =>
-  ["/tmp/fun/" "my.fnl"]
-
-  (u/parse-path "/my.janet")
-  # =>
-  ["/" "my.janet"]
-
-  (u/parse-path "pp.el")
-  # =>
-  ["" "pp.el"]
-
-  (u/parse-path "/")
-  # =>
-  ["/" ""]
-
-  (u/parse-path "")
-  # =>
-  ["" ""]
-
-  )
-
-(defn u/is-file?
-  [path]
-  #
-  (= :file (os/stat path :mode)))
-
 
 
 (def t/test-file-ext ".tche")
@@ -3920,8 +3931,7 @@
   (os/rm test-path)
   #
   (when (empty? out)
-    (def m (t/lint-and-get-error input))
-    (if m
+    (if (t/lint-and-get-error input)
       (break [:lint-error nil nil nil])
       (break [:test-run-error nil nil nil])))
   #
@@ -4256,7 +4266,7 @@
 
 ###########################################################################
 
-(def version "2026-01-09_08-13-31")
+(def version "2026-01-09_14-00-37")
 
 (def usage
   ``
