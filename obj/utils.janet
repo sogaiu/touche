@@ -26,6 +26,10 @@
   # =>
   ["" "pp.el"]
 
+  (u/parse-path "/etc/init.d")
+  # =>
+  ["/etc/" "init.d"]
+
   (u/parse-path "/")
   # =>
   ["/" ""]

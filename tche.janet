@@ -59,6 +59,10 @@
   # =>
   ["" "pp.el"]
 
+  (u/parse-path "/etc/init.d")
+  # =>
+  ["/etc/" "init.d"]
+
   (u/parse-path "/")
   # =>
   ["/" ""]
@@ -3785,6 +3789,88 @@
   )
 
 
+(comment import ./search :prefix "")
+(def s/sep
+  (let [tos (os/which)]
+    (if (or (= :windows tos) (= :mingw tos)) `\` "/")))
+
+(defn s/find-files
+  [dir &opt pred]
+  (default pred identity)
+  (def paths @[])
+  (defn helper
+    [a-dir]
+    (each path (os/dir a-dir)
+      (def sub-path (string a-dir s/sep path))
+      (case (os/stat sub-path :mode)
+        :directory
+        (when (not= path ".git")
+          (helper sub-path))
+        #
+        :file
+        (when (pred sub-path)
+          (array/push paths sub-path)))))
+  (helper dir)
+  paths)
+
+(comment
+
+  (s/find-files "." |(string/has-suffix? ".janet" $))
+
+  )
+
+(defn s/clean-end-of-path
+  [path a-sep]
+  (when (one? (length path))
+    (break path))
+  (if (string/has-suffix? a-sep path)
+    (string/slice path 0 -2)
+    path))
+
+(comment
+
+  (s/clean-end-of-path "hello/" "/")
+  # =>
+  "hello"
+
+  (s/clean-end-of-path "/" "/")
+  # =>
+  "/"
+
+  )
+
+(defn s/has-janet-shebang?
+  [path]
+  (with [f (file/open path)]
+    (def first-line (file/read f :line))
+    (when first-line
+      (and (string/find "env" first-line)
+           (string/find "janet" first-line)))))
+
+(defn s/seems-like-janet?
+  [path]
+  (or (string/has-suffix? ".janet" path)
+      (s/has-janet-shebang? path)))
+
+(defn s/collect-paths
+  [includes &opt pred]
+  (default pred identity)
+  (def filepaths @[])
+  # collect file and directory paths
+  (each thing includes
+    (def apath (s/clean-end-of-path thing s/sep))
+    (def mode (os/stat apath :mode))
+    # XXX: should :link be supported?
+    (cond
+      (= :file mode)
+      (array/push filepaths apath)
+      #
+      (= :directory mode)
+      (array/concat filepaths (s/find-files apath pred))))
+  #
+  filepaths)
+
+
 (comment import ./tests :prefix "")
 (comment import ./errors :prefix "")
 
@@ -3984,6 +4070,13 @@
 
 ########################################################################
 
+(defn c/make-prefix
+  [opts root]
+  (if (get opts :roots)
+    (let [[_ dirname] (u/parse-path root)]
+      (string dirname s/sep))
+    ""))
+
 (defn c/summarize
   [noted-paths]
   # pass / fail
@@ -4096,13 +4189,14 @@
   (def old-dir (os/cwd))
   (each [root src-paths] test-sets
     (os/cd root)
+    (def prefix (c/make-prefix opts root))
     (each path src-paths
-      (when (and (not (get excludes path))
-                 (u/is-file? path))
-        (l/note :i path)
+      (when (and (not (get excludes path)) (u/is-file? path))
+        (def disp-path (string prefix path))
+        (l/note :i disp-path)
         (def single-result (c/mrr-single path opts))
         (def [_ tr] single-result)
-        (array/push test-results [path tr])
+        (array/push test-results [disp-path tr])
         (c/tally-mrr-result path single-result noted-paths)))
     (os/cd old-dir))
   #
@@ -4205,11 +4299,13 @@
   (defer (os/cd old-dir)
     (each [root src-paths] test-sets
       (os/cd root)
+      (def prefix (c/make-prefix opts root))
       (each path src-paths
         (when (and (not (get excludes path)) (u/is-file? path))
+          (def disp-path (string prefix path))
           (def single-result (c/mru-single path opts))
           (def [_ _ tr] single-result)
-          (array/push test-results [path tr])
+          (array/push test-results [disp-path tr])
           (def ret (c/tally-mru-result path single-result noted-paths))
           (when (= :halt ret)
             (set stop? true)
@@ -4231,93 +4327,13 @@
 (comment import ./output :prefix "")
 
 (comment import ./search :prefix "")
-(def s/sep
-  (let [tos (os/which)]
-    (if (or (= :windows tos) (= :mingw tos)) `\` "/")))
-
-(defn s/find-files
-  [dir &opt pred]
-  (default pred identity)
-  (def paths @[])
-  (defn helper
-    [a-dir]
-    (each path (os/dir a-dir)
-      (def sub-path (string a-dir s/sep path))
-      (case (os/stat sub-path :mode)
-        :directory
-        (when (not= path ".git")
-          (helper sub-path))
-        #
-        :file
-        (when (pred sub-path)
-          (array/push paths sub-path)))))
-  (helper dir)
-  paths)
-
-(comment
-
-  (s/find-files "." |(string/has-suffix? ".janet" $))
-
-  )
-
-(defn s/clean-end-of-path
-  [path a-sep]
-  (when (one? (length path))
-    (break path))
-  (if (string/has-suffix? a-sep path)
-    (string/slice path 0 -2)
-    path))
-
-(comment
-
-  (s/clean-end-of-path "hello/" "/")
-  # =>
-  "hello"
-
-  (s/clean-end-of-path "/" "/")
-  # =>
-  "/"
-
-  )
-
-(defn s/has-janet-shebang?
-  [path]
-  (with [f (file/open path)]
-    (def first-line (file/read f :line))
-    (when first-line
-      (and (string/find "env" first-line)
-           (string/find "janet" first-line)))))
-
-(defn s/seems-like-janet?
-  [path]
-  (or (string/has-suffix? ".janet" path)
-      (s/has-janet-shebang? path)))
-
-(defn s/collect-paths
-  [includes &opt pred]
-  (default pred identity)
-  (def filepaths @[])
-  # collect file and directory paths
-  (each thing includes
-    (def apath (s/clean-end-of-path thing s/sep))
-    (def mode (os/stat apath :mode))
-    # XXX: should :link be supported?
-    (cond
-      (= :file mode)
-      (array/push filepaths apath)
-      #
-      (= :directory mode)
-      (array/concat filepaths (s/find-files apath pred))))
-  #
-  filepaths)
-
 
 (comment import ./utils :prefix "")
 
 
 ###########################################################################
 
-(def version "2026-01-10_14-27-42")
+(def version "2026-01-10_20-41-10")
 
 (def usage
   ``

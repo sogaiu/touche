@@ -2,10 +2,18 @@
 (import ./log :prefix "")
 (import ./output :prefix "")
 (import ./rewrite :prefix "")
+(import ./search :prefix "")
 (import ./tests :prefix "")
 (import ./utils :prefix "")
 
 ########################################################################
+
+(defn c/make-prefix
+  [opts root]
+  (if (get opts :roots)
+    (let [[_ dirname] (u/parse-path root)]
+      (string dirname s/sep))
+    ""))
 
 (defn c/summarize
   [noted-paths]
@@ -119,13 +127,14 @@
   (def old-dir (os/cwd))
   (each [root src-paths] test-sets
     (os/cd root)
+    (def prefix (c/make-prefix opts root))
     (each path src-paths
-      (when (and (not (get excludes path))
-                 (u/is-file? path))
-        (l/note :i path)
+      (when (and (not (get excludes path)) (u/is-file? path))
+        (def disp-path (string prefix path))
+        (l/note :i disp-path)
         (def single-result (c/mrr-single path opts))
         (def [_ tr] single-result)
-        (array/push test-results [path tr])
+        (array/push test-results [disp-path tr])
         (c/tally-mrr-result path single-result noted-paths)))
     (os/cd old-dir))
   #
@@ -228,11 +237,13 @@
   (defer (os/cd old-dir)
     (each [root src-paths] test-sets
       (os/cd root)
+      (def prefix (c/make-prefix opts root))
       (each path src-paths
         (when (and (not (get excludes path)) (u/is-file? path))
+          (def disp-path (string prefix path))
           (def single-result (c/mru-single path opts))
           (def [_ _ tr] single-result)
-          (array/push test-results [path tr])
+          (array/push test-results [disp-path tr])
           (def ret (c/tally-mru-result path single-result noted-paths))
           (when (= :halt ret)
             (set stop? true)
