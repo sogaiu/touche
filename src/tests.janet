@@ -1,12 +1,12 @@
 (import ./errors :as e)
+(import ./paths :as p)
 (import ./rewrite :as r)
-(import ./utils :as u)
 
 (def test-file-ext ".tche")
 
 (defn make-test-path
   [in-path]
-  (def [fdir fname] (u/parse-path in-path))
+  (def [fdir fname] (p/parse-path in-path))
   #
   (string fdir "_" fname test-file-ext))
 

@@ -29,11 +29,33 @@
       (eprintf "  e via try: %n" e))))
 
 
-(comment import ./utils :prefix "")
-(comment import ./errors :prefix "")
+(comment import ./files :prefix "")
+(comment import ./paths :prefix "")
+(def p/sep
+  (let [tos (os/which)]
+    (if (or (= :windows tos) (= :mingw tos)) `\` "/")))
 
+(defn p/clean-end-of-path
+  [path a-sep]
+  (when (one? (length path))
+    (break path))
+  (if (string/has-suffix? a-sep path)
+    (string/slice path 0 -2)
+    path))
 
-(defn u/parse-path
+(comment
+
+  (p/clean-end-of-path "hello/" "/")
+  # =>
+  "hello"
+
+  (p/clean-end-of-path "/" "/")
+  # =>
+  "/"
+
+  )
+
+(defn p/parse-path
   [path]
   (def revcap-peg
     ~(sequence (capture (sequence (choice (to (choice "/" `\`))
@@ -47,80 +69,114 @@
 
 (comment
 
-  (u/parse-path "/tmp/fun/my.fnl")
+  (p/parse-path "/tmp/fun/my.fnl")
   # =>
   ["/tmp/fun/" "my.fnl"]
 
-  (u/parse-path "/my.janet")
+  (p/parse-path "/my.janet")
   # =>
   ["/" "my.janet"]
 
-  (u/parse-path "pp.el")
+  (p/parse-path "pp.el")
   # =>
   ["" "pp.el"]
 
-  (u/parse-path "/etc/init.d")
+  (p/parse-path "/etc/init.d")
   # =>
   ["/etc/" "init.d"]
 
-  (u/parse-path "/")
+  (p/parse-path "/")
   # =>
   ["/" ""]
 
-  (u/parse-path "")
+  (p/parse-path "")
   # =>
   ["" ""]
 
   )
 
-(defn u/is-file?
+
+
+(defn f/is-file?
   [path]
   #
   (= :file (os/stat path :mode)))
 
-(defn u/merge-indexed
-  [left right]
-  (cond
-    (and (nil? left) (nil? right)) nil
-    (nil? left) (array ;right)
-    (nil? right) (array ;left)
-    (distinct [;left ;right])))
+(defn f/find-files
+  [dir &opt pred]
+  (default pred identity)
+  (def paths @[])
+  (defn helper
+    [a-dir]
+    (each path (os/dir a-dir)
+      (def sub-path (string a-dir p/sep path))
+      (case (os/stat sub-path :mode)
+        :directory
+        (when (not= path ".git")
+          (helper sub-path))
+        #
+        :file
+        (when (pred sub-path)
+          (array/push paths sub-path)))))
+  (helper dir)
+  paths)
 
 (comment
 
-  (u/merge-indexed nil nil)
-  # =>
-  nil
-
-  (u/merge-indexed [:a :b :c] nil)
-  # =>
-  @[:a :b :c]
-
-  (u/merge-indexed nil [1 2 3])
-  # =>
-  @[1 2 3]
-
-  (u/merge-indexed [:ant :bee :cat] [:bee :dog])
-  # =>
-  @[:ant :bee :cat :dog]
+  (f/find-files "." |(string/has-suffix? ".janet" $))
 
   )
 
-# XXX: find a better home for this
-(def u/conf-file ".tche.jdn")
+(defn f/has-janet-shebang?
+  [path]
+  (with [f (file/open path)]
+    (def first-line (file/read f :line))
+    (when first-line
+      (and (string/find "env" first-line)
+           (string/find "janet" first-line)))))
 
-(defn u/parse-conf-file
-  [u/conf-file]
-  (def b {:in "parse-conf-file" :args {:conf-file u/conf-file}})
+(defn f/seems-like-janet?
+  [path]
+  (or (string/has-suffix? ".janet" path)
+      (f/has-janet-shebang? path)))
+
+(defn f/collect-paths
+  [includes &opt pred]
+  (default pred identity)
+  (def filepaths @[])
+  # collect file and directory paths
+  (each thing includes
+    (def apath (p/clean-end-of-path thing p/sep))
+    (def mode (os/stat apath :mode))
+    # XXX: should :link be supported?
+    (cond
+      (= :file mode)
+      (array/push filepaths apath)
+      #
+      (= :directory mode)
+      (array/concat filepaths (f/find-files apath pred))))
   #
-  (let [src (try (slurp u/conf-file)
+  filepaths)
+
+
+(comment import ./settings :prefix "")
+(comment import ./errors :prefix "")
+
+
+(def s/conf-file ".tche.jdn")
+
+(defn s/parse-conf-file
+  [s/conf-file]
+  (def b {:in "parse-conf-file" :args {:conf-file s/conf-file}})
+  #
+  (let [src (try (slurp s/conf-file)
               ([e] (e/emf (merge b {:e-via-try e})
-                          "failed to slurp: %s" u/conf-file)))
+                          "failed to slurp: %s" s/conf-file)))
         cnf (try (parse src)
               ([e] (e/emf (merge b {:e-via-try e})
-                          "failed to parse: %s" u/conf-file)))]
+                          "failed to parse: %s" s/conf-file)))]
     (when (not cnf)
-      (e/emf b "failed to load: %s" u/conf-file))
+      (e/emf b "failed to load: %s" s/conf-file))
     #
     (when (not (dictionary? cnf))
       (e/emf b "expected dictionary in conf, got: %s" (type cnf)))
@@ -136,6 +192,34 @@
 
 
 
+(defn a/merge-indexed
+  [left right]
+  (cond
+    (and (nil? left) (nil? right)) nil
+    (nil? left) (array ;right)
+    (nil? right) (array ;left)
+    (distinct [;left ;right])))
+
+(comment
+
+  (a/merge-indexed nil nil)
+  # =>
+  nil
+
+  (a/merge-indexed [:a :b :c] nil)
+  # =>
+  @[:a :b :c]
+
+  (a/merge-indexed nil [1 2 3])
+  # =>
+  @[1 2 3]
+
+  (a/merge-indexed [:ant :bee :cat] [:bee :dog])
+  # =>
+  @[:ant :bee :cat :dog]
+
+  )
+
 (defn a/parse-args
   [args]
   (def b {:in "parse-args" :args {:args args}})
@@ -147,13 +231,13 @@
   (when (or (= head "-h") (= head "--help")
             # might have been invoked with no paths in repository root
             (and (not head)
-                 (not (u/is-file? u/conf-file))))
+                 (not (f/is-file? s/conf-file))))
     (break @{:show-help true}))
   #
   (when (or (= head "-v") (= head "--version")
             # might have been invoked with no paths in repository root
             (and (not head) 
-                 (not (u/is-file? u/conf-file))))
+                 (not (f/is-file? s/conf-file))))
     (break @{:show-version true}))
   #
   (def opts
@@ -178,8 +262,8 @@
       (not (empty? the-args))
       [the-args @{} nil]
       # conf file
-      (u/is-file? u/conf-file)
-      (u/parse-conf-file u/conf-file)
+      (f/is-file? s/conf-file)
+      (s/parse-conf-file s/conf-file)
       #
       (e/emf b "unexpected result parsing args: %n" args)))
   #
@@ -187,11 +271,11 @@
           (not (or (os/getenv "NO_COLOR") (get opts :no-color))))
   #
   (merge opts
-         {:includes (u/merge-indexed includes (get opts :includes @[]))
+         {:includes (a/merge-indexed includes (get opts :includes @[]))
           # value of :excludes ends up as a table
           :excludes (merge-into excludes
                                 (invert (get opts :excludes @{})))
-          :roots (u/merge-indexed roots (get opts :roots))}))
+          :roots (a/merge-indexed roots (get opts :roots))}))
 
 (comment
 
@@ -229,6 +313,8 @@
 
 (comment import ./commands :prefix "")
 (comment import ./errors :prefix "")
+
+(comment import ./files :prefix "")
 
 (comment import ./log :prefix "")
 # :w - warn
@@ -489,6 +575,8 @@
     (o/prin-sep)
     (l/noten :o)))
 
+
+(comment import ./paths :prefix "")
 
 (comment import ./rewrite :prefix "")
 (comment import ./errors :prefix "")
@@ -3789,101 +3877,19 @@
   )
 
 
-(comment import ./search :prefix "")
-(def s/sep
-  (let [tos (os/which)]
-    (if (or (= :windows tos) (= :mingw tos)) `\` "/")))
-
-(defn s/find-files
-  [dir &opt pred]
-  (default pred identity)
-  (def paths @[])
-  (defn helper
-    [a-dir]
-    (each path (os/dir a-dir)
-      (def sub-path (string a-dir s/sep path))
-      (case (os/stat sub-path :mode)
-        :directory
-        (when (not= path ".git")
-          (helper sub-path))
-        #
-        :file
-        (when (pred sub-path)
-          (array/push paths sub-path)))))
-  (helper dir)
-  paths)
-
-(comment
-
-  (s/find-files "." |(string/has-suffix? ".janet" $))
-
-  )
-
-(defn s/clean-end-of-path
-  [path a-sep]
-  (when (one? (length path))
-    (break path))
-  (if (string/has-suffix? a-sep path)
-    (string/slice path 0 -2)
-    path))
-
-(comment
-
-  (s/clean-end-of-path "hello/" "/")
-  # =>
-  "hello"
-
-  (s/clean-end-of-path "/" "/")
-  # =>
-  "/"
-
-  )
-
-(defn s/has-janet-shebang?
-  [path]
-  (with [f (file/open path)]
-    (def first-line (file/read f :line))
-    (when first-line
-      (and (string/find "env" first-line)
-           (string/find "janet" first-line)))))
-
-(defn s/seems-like-janet?
-  [path]
-  (or (string/has-suffix? ".janet" path)
-      (s/has-janet-shebang? path)))
-
-(defn s/collect-paths
-  [includes &opt pred]
-  (default pred identity)
-  (def filepaths @[])
-  # collect file and directory paths
-  (each thing includes
-    (def apath (s/clean-end-of-path thing s/sep))
-    (def mode (os/stat apath :mode))
-    # XXX: should :link be supported?
-    (cond
-      (= :file mode)
-      (array/push filepaths apath)
-      #
-      (= :directory mode)
-      (array/concat filepaths (s/find-files apath pred))))
-  #
-  filepaths)
-
-
 (comment import ./tests :prefix "")
 (comment import ./errors :prefix "")
 
-(comment import ./rewrite :prefix "")
+(comment import ./paths :prefix "")
 
-(comment import ./utils :prefix "")
+(comment import ./rewrite :prefix "")
 
 
 (def t/test-file-ext ".tche")
 
 (defn t/make-test-path
   [in-path]
-  (def [fdir fname] (u/parse-path in-path))
+  (def [fdir fname] (p/parse-path in-path))
   #
   (string fdir "_" fname t/test-file-ext))
 
@@ -4065,16 +4071,14 @@
   [exit-code test-results test-out err])
 
 
-(comment import ./utils :prefix "")
-
 
 ########################################################################
 
 (defn c/make-prefix
   [opts root]
   (if (get opts :roots)
-    (let [[_ dirname] (u/parse-path root)]
-      (string dirname s/sep))
+    (let [[_ dirname] (p/parse-path root)]
+      (string dirname p/sep))
     ""))
 
 (defn c/summarize
@@ -4191,7 +4195,7 @@
     (os/cd root)
     (def prefix (c/make-prefix opts root))
     (each path src-paths
-      (when (and (not (get excludes path)) (u/is-file? path))
+      (when (and (not (get excludes path)) (f/is-file? path))
         (def disp-path (string prefix path))
         (l/note :i disp-path)
         (def single-result (c/mrr-single path opts))
@@ -4301,7 +4305,7 @@
       (os/cd root)
       (def prefix (c/make-prefix opts root))
       (each path src-paths
-        (when (and (not (get excludes path)) (u/is-file? path))
+        (when (and (not (get excludes path)) (f/is-file? path))
           (def disp-path (string prefix path))
           (def single-result (c/mru-single path opts))
           (def [_ _ tr] single-result)
@@ -4320,20 +4324,20 @@
   [exit-code test-results])
 
 
+(comment import ./files :prefix "")
+
 (comment import ./errors :prefix "")
 
 (comment import ./log :prefix "")
 
 (comment import ./output :prefix "")
 
-(comment import ./search :prefix "")
-
-(comment import ./utils :prefix "")
+(comment import ./settings :prefix "")
 
 
 ###########################################################################
 
-(def version "2026-01-10_20-41-10")
+(def version "2026-01-10_21-35-46")
 
 (def usage
   ``
@@ -4416,18 +4420,18 @@
     # if roots are specified, includes / excludes are ignored
     (each r roots
       (os/cd r)
-      (when (u/is-file? u/conf-file)
-        (def [includes excludes _] (u/parse-conf-file u/conf-file))
+      (when (f/is-file? s/conf-file)
+        (def [includes excludes _] (s/parse-conf-file s/conf-file))
         (when (not (empty? includes))
           (when (not (empty? excludes))
             (merge-into (get opts :excludes) excludes))
           (array/push test-sets
-                      [r (s/collect-paths includes s/seems-like-janet?)])))
+                      [r (f/collect-paths includes f/seems-like-janet?)])))
       (os/cd old-dir))
     # typical operation does not involve multiple roots
     (array/push test-sets
-                [(os/cwd) (s/collect-paths (get opts :includes)
-                                           s/seems-like-janet?)]))
+                [(os/cwd) (f/collect-paths (get opts :includes)
+                                           f/seems-like-janet?)]))
   # turn off user-oriented output if raw output requested
   (when (get opts :raw) (l/clear-d-tables!))
   # 0 - successful testing / updating

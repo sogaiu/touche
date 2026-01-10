@@ -1,5 +1,34 @@
 (import ./errors :prefix "")
-(import ./utils :prefix "")
+(import ./files :prefix "")
+(import ./settings :prefix "")
+
+(defn a/merge-indexed
+  [left right]
+  (cond
+    (and (nil? left) (nil? right)) nil
+    (nil? left) (array ;right)
+    (nil? right) (array ;left)
+    (distinct [;left ;right])))
+
+(comment
+
+  (a/merge-indexed nil nil)
+  # =>
+  nil
+
+  (a/merge-indexed [:a :b :c] nil)
+  # =>
+  @[:a :b :c]
+
+  (a/merge-indexed nil [1 2 3])
+  # =>
+  @[1 2 3]
+
+  (a/merge-indexed [:ant :bee :cat] [:bee :dog])
+  # =>
+  @[:ant :bee :cat :dog]
+
+  )
 
 (defn a/parse-args
   [args]
@@ -12,13 +41,13 @@
   (when (or (= head "-h") (= head "--help")
             # might have been invoked with no paths in repository root
             (and (not head)
-                 (not (u/is-file? u/conf-file))))
+                 (not (f/is-file? s/conf-file))))
     (break @{:show-help true}))
   #
   (when (or (= head "-v") (= head "--version")
             # might have been invoked with no paths in repository root
             (and (not head) 
-                 (not (u/is-file? u/conf-file))))
+                 (not (f/is-file? s/conf-file))))
     (break @{:show-version true}))
   #
   (def opts
@@ -43,8 +72,8 @@
       (not (empty? the-args))
       [the-args @{} nil]
       # conf file
-      (u/is-file? u/conf-file)
-      (u/parse-conf-file u/conf-file)
+      (f/is-file? s/conf-file)
+      (s/parse-conf-file s/conf-file)
       #
       (e/emf b "unexpected result parsing args: %n" args)))
   #
@@ -52,11 +81,11 @@
           (not (or (os/getenv "NO_COLOR") (get opts :no-color))))
   #
   (merge opts
-         {:includes (u/merge-indexed includes (get opts :includes @[]))
+         {:includes (a/merge-indexed includes (get opts :includes @[]))
           # value of :excludes ends up as a table
           :excludes (merge-into excludes
                                 (invert (get opts :excludes @{})))
-          :roots (u/merge-indexed roots (get opts :roots))}))
+          :roots (a/merge-indexed roots (get opts :roots))}))
 
 (comment
 

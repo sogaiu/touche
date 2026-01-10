@@ -1,18 +1,18 @@
 (import ./errors :prefix "")
+(import ./files :prefix "")
 (import ./log :prefix "")
 (import ./output :prefix "")
+(import ./paths :prefix "")
 (import ./rewrite :prefix "")
-(import ./search :prefix "")
 (import ./tests :prefix "")
-(import ./utils :prefix "")
 
 ########################################################################
 
 (defn c/make-prefix
   [opts root]
   (if (get opts :roots)
-    (let [[_ dirname] (u/parse-path root)]
-      (string dirname s/sep))
+    (let [[_ dirname] (p/parse-path root)]
+      (string dirname p/sep))
     ""))
 
 (defn c/summarize
@@ -129,7 +129,7 @@
     (os/cd root)
     (def prefix (c/make-prefix opts root))
     (each path src-paths
-      (when (and (not (get excludes path)) (u/is-file? path))
+      (when (and (not (get excludes path)) (f/is-file? path))
         (def disp-path (string prefix path))
         (l/note :i disp-path)
         (def single-result (c/mrr-single path opts))
@@ -239,7 +239,7 @@
       (os/cd root)
       (def prefix (c/make-prefix opts root))
       (each path src-paths
-        (when (and (not (get excludes path)) (u/is-file? path))
+        (when (and (not (get excludes path)) (f/is-file? path))
           (def disp-path (string prefix path))
           (def single-result (c/mru-single path opts))
           (def [_ _ tr] single-result)

@@ -1,10 +1,10 @@
 (import ./args :prefix "")
 (import ./commands :prefix "")
+(import ./files :prefix "")
 (import ./errors :prefix "")
 (import ./log :prefix "")
 (import ./output :prefix "")
-(import ./search :prefix "")
-(import ./utils :prefix "")
+(import ./settings :prefix "")
 
 ###########################################################################
 
@@ -91,18 +91,18 @@
     # if roots are specified, includes / excludes are ignored
     (each r roots
       (os/cd r)
-      (when (u/is-file? u/conf-file)
-        (def [includes excludes _] (u/parse-conf-file u/conf-file))
+      (when (f/is-file? s/conf-file)
+        (def [includes excludes _] (s/parse-conf-file s/conf-file))
         (when (not (empty? includes))
           (when (not (empty? excludes))
             (merge-into (get opts :excludes) excludes))
           (array/push test-sets
-                      [r (s/collect-paths includes s/seems-like-janet?)])))
+                      [r (f/collect-paths includes f/seems-like-janet?)])))
       (os/cd old-dir))
     # typical operation does not involve multiple roots
     (array/push test-sets
-                [(os/cwd) (s/collect-paths (get opts :includes)
-                                           s/seems-like-janet?)]))
+                [(os/cwd) (f/collect-paths (get opts :includes)
+                                           f/seems-like-janet?)]))
   # turn off user-oriented output if raw output requested
   (when (get opts :raw) (l/clear-d-tables!))
   # 0 - successful testing / updating

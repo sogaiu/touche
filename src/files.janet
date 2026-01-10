@@ -1,6 +1,9 @@
-(def sep
-  (let [tos (os/which)]
-    (if (or (= :windows tos) (= :mingw tos)) `\` "/")))
+(import ./paths :as p)
+
+(defn is-file?
+  [path]
+  #
+  (= :file (os/stat path :mode)))
 
 (defn find-files
   [dir &opt pred]
@@ -9,7 +12,7 @@
   (defn helper
     [a-dir]
     (each path (os/dir a-dir)
-      (def sub-path (string a-dir sep path))
+      (def sub-path (string a-dir p/sep path))
       (case (os/stat sub-path :mode)
         :directory
         (when (not= path ".git")
@@ -24,26 +27,6 @@
 (comment
 
   (find-files "." |(string/has-suffix? ".janet" $))
-
-  )
-
-(defn clean-end-of-path
-  [path a-sep]
-  (when (one? (length path))
-    (break path))
-  (if (string/has-suffix? a-sep path)
-    (string/slice path 0 -2)
-    path))
-
-(comment
-
-  (clean-end-of-path "hello/" "/")
-  # =>
-  "hello"
-
-  (clean-end-of-path "/" "/")
-  # =>
-  "/"
 
   )
 
@@ -66,7 +49,7 @@
   (def filepaths @[])
   # collect file and directory paths
   (each thing includes
-    (def apath (clean-end-of-path thing sep))
+    (def apath (p/clean-end-of-path thing p/sep))
     (def mode (os/stat apath :mode))
     # XXX: should :link be supported?
     (cond
