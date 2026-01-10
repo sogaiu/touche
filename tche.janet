@@ -4195,13 +4195,11 @@
   (defn helper
     [a-dir]
     (each path (os/dir a-dir)
-      (def sub-path
-        (string a-dir s/sep path))
+      (def sub-path (string a-dir s/sep path))
       (case (os/stat sub-path :mode)
         :directory
         (when (not= path ".git")
-          (when (not (os/stat (string sub-path s/sep ".gitrepo")))
-            (helper sub-path)))
+          (helper sub-path))
         #
         :file
         (when (pred sub-path)
@@ -4265,7 +4263,7 @@
 
 ###########################################################################
 
-(def version "2026-01-10_02-59-35")
+(def version "2026-01-10_03-00-46")
 
 (def usage
   ``
