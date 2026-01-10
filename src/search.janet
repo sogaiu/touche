@@ -1,7 +1,6 @@
 (def sep
-  (if (= :windows (os/which))
-    `\`
-    "/"))
+  (let [tos (os/which)]
+    (if (or (= :windows tos) (= :mingw tos)) `\` "/")))
 
 (defn find-files
   [dir &opt pred]

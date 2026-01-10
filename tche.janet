@@ -4185,9 +4185,8 @@
 
 (comment import ./search :prefix "")
 (def s/sep
-  (if (= :windows (os/which))
-    `\`
-    "/"))
+  (let [tos (os/which)]
+    (if (or (= :windows tos) (= :mingw tos)) `\` "/")))
 
 (defn s/find-files
   [dir &opt pred]
@@ -4266,7 +4265,7 @@
 
 ###########################################################################
 
-(def version "2026-01-09_14-00-37")
+(def version "2026-01-10_02-59-35")
 
 (def usage
   ``
