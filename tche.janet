@@ -74,24 +74,61 @@
   #
   (= :file (os/stat path :mode)))
 
+(defn u/merge-indexed
+  [left right]
+  (cond
+    (and (nil? left) (nil? right)) nil
+    (nil? left) (array ;right)
+    (nil? right) (array ;left)
+    (distinct [;left ;right])))
+
+(comment
+
+  (u/merge-indexed nil nil)
+  # =>
+  nil
+
+  (u/merge-indexed [:a :b :c] nil)
+  # =>
+  @[:a :b :c]
+
+  (u/merge-indexed nil [1 2 3])
+  # =>
+  @[1 2 3]
+
+  (u/merge-indexed [:ant :bee :cat] [:bee :dog])
+  # =>
+  @[:ant :bee :cat :dog]
+
+  )
+
+# XXX: find a better home for this
+(def u/conf-file ".tche.jdn")
+
 (defn u/parse-conf-file
-  [conf-file]
-  (def b {:in "parse-conf-file" :args {:conf-file conf-file}})
+  [u/conf-file]
+  (def b {:in "parse-conf-file" :args {:conf-file u/conf-file}})
   #
-  (let [src (try (slurp conf-file)
+  (let [src (try (slurp u/conf-file)
               ([e] (e/emf (merge b {:e-via-try e})
-                          "failed to slurp: %s" conf-file)))
+                          "failed to slurp: %s" u/conf-file)))
         cnf (try (parse src)
               ([e] (e/emf (merge b {:e-via-try e})
-                          "failed to parse: %s" conf-file)))]
+                          "failed to parse: %s" u/conf-file)))]
     (when (not cnf)
-      (e/emf b "failed to load: %s" conf-file))
+      (e/emf b "failed to load: %s" u/conf-file))
     #
     (when (not (dictionary? cnf))
       (e/emf b "expected dictionary in conf, got: %s" (type cnf)))
     #
+    (def roots
+      (if-let [r (get cnf :roots)]
+        (array ;r)
+        nil))
+    #
     [(array ;(get cnf :includes @[]))
-     (array ;(get cnf :excludes @[]))]))
+     (invert (get cnf :excludes @{}))
+     roots]))
 
 
 
@@ -103,18 +140,16 @@
   #
   (def head (get the-args 0))
   #
-  (def conf-file ".tche.jdn")
-  #
   (when (or (= head "-h") (= head "--help")
             # might have been invoked with no paths in repository root
             (and (not head)
-                 (not= :file (os/stat conf-file :mode))))
+                 (not (u/is-file? u/conf-file))))
     (break @{:show-help true}))
   #
   (when (or (= head "-v") (= head "--version")
             # might have been invoked with no paths in repository root
-            (and (not head)
-                 (not= :file (os/stat conf-file :mode))))
+            (and (not head) 
+                 (not (u/is-file? u/conf-file))))
     (break @{:show-version true}))
   #
   (def opts
@@ -133,29 +168,26 @@
           parsed))
       @{}))
   #
-  (def [includes excludes]
+  (def [includes excludes roots]
     (cond
       # paths on command line take precedence over conf file
       (not (empty? the-args))
-      [the-args @[]]
+      [the-args @{} nil]
       # conf file
-      (u/is-file? conf-file)
-      (u/parse-conf-file conf-file)
+      (u/is-file? u/conf-file)
+      (u/parse-conf-file u/conf-file)
       #
       (e/emf b "unexpected result parsing args: %n" args)))
   #
   (setdyn :test/color?
           (not (or (os/getenv "NO_COLOR") (get opts :no-color))))
   #
-  (defn merge-indexed
-    [left right]
-    (default left [])
-    (default right [])
-    (distinct [;left ;right]))
-  #
   (merge opts
-         {:includes (merge-indexed includes (get opts :includes))
-          :excludes (merge-indexed excludes (get opts :excludes))}))
+         {:includes (u/merge-indexed includes (get opts :includes @[]))
+          # value of :excludes ends up as a table
+          :excludes (merge-into excludes
+                                (invert (get opts :excludes @{})))
+          :roots (u/merge-indexed roots (get opts :roots))}))
 
 (comment
 
@@ -165,8 +197,9 @@
 
   (a/parse-args ["src/main.janet"])
   # =>
-  @{:excludes @[]
-    :includes @["src/main.janet"]}
+  @{:excludes @{}
+    :includes @["src/main.janet"]
+    :roots nil}
 
   (a/parse-args ["-h"])
   # =>
@@ -174,14 +207,16 @@
 
   (a/parse-args ["{:overwrite true}" "src/main.janet"])
   # =>
-  @{:excludes @[]
+  @{:excludes @{}
     :includes @["src/main.janet"]
-    :overwrite true}
+    :overwrite true
+    :roots nil}
 
   (a/parse-args [`{:excludes ["src/args.janet"]}` "src/main.janet"])
   # =>
-  @{:excludes @["src/args.janet"]
-    :includes @["src/main.janet"]}
+  @{:excludes @{"src/args.janet" 0}
+    :includes @["src/main.janet"]
+    :roots nil}
 
   (setdyn :test/color? old-value)
 
@@ -4052,19 +4087,24 @@
     (e/emf b "unexpected result %p for: %s" desc path)))
 
 (defn c/make-run-report
-  [src-paths opts]
+  [test-sets opts]
   (def excludes (get opts :excludes))
   (def noted-paths @{:parse @[] :lint @[] :run @[]
                      :pass @[] :fail @[]})
   (def test-results @[])
   # generate tests, run tests, and report
-  (each path src-paths
-    (when (and (not (has-value? excludes path)) (u/is-file? path))
-      (l/note :i path)
-      (def single-result (c/mrr-single path opts))
-      (def [_ tr] single-result)
-      (array/push test-results [path tr])
-      (c/tally-mrr-result path single-result noted-paths)))
+  (def old-dir (os/cwd))
+  (each [root src-paths] test-sets
+    (os/cd root)
+    (each path src-paths
+      (when (and (not (get excludes path))
+                 (u/is-file? path))
+        (l/note :i path)
+        (def single-result (c/mrr-single path opts))
+        (def [_ tr] single-result)
+        (array/push test-results [path tr])
+        (c/tally-mrr-result path single-result noted-paths)))
+    (os/cd old-dir))
   #
   (l/notenf :i (o/separator "="))
   (c/summarize noted-paths)
@@ -4154,20 +4194,27 @@
   ret)
 
 (defn c/make-run-update
-  [src-paths opts]
+  [test-sets opts]
   (def excludes (get opts :excludes))
   (def noted-paths @{:parse @[] :lint @[] :run @[]
                      :update @[]})
   (def test-results @[])
+  (var stop? nil)
   # generate tests, run tests, and update
-  (each path src-paths
-    (when (and (not (has-value? excludes path)) (u/is-file? path))
-      (def single-result (c/mru-single path opts))
-      (def [_ _ tr] single-result)
-      (array/push test-results [path tr])
-      (def ret (c/tally-mru-result path single-result noted-paths))
-      (when (= :halt ret)
-        (break))))
+  (def old-dir (os/cwd))
+  (defer (os/cd old-dir)
+    (each [root src-paths] test-sets
+      (os/cd root)
+      (each path src-paths
+        (when (and (not (get excludes path)) (u/is-file? path))
+          (def single-result (c/mru-single path opts))
+          (def [_ _ tr] single-result)
+          (array/push test-results [path tr])
+          (def ret (c/tally-mru-result path single-result noted-paths))
+          (when (= :halt ret)
+            (set stop? true)
+            (break))))
+      (when stop? (break))))
   #
   (l/notenf :i (o/separator "="))
   (c/summarize noted-paths)
@@ -4241,6 +4288,11 @@
       (and (string/find "env" first-line)
            (string/find "janet" first-line)))))
 
+(defn s/seems-like-janet?
+  [path]
+  (or (string/has-suffix? ".janet" path)
+      (s/has-janet-shebang? path)))
+
 (defn s/collect-paths
   [includes &opt pred]
   (default pred identity)
@@ -4260,10 +4312,12 @@
   filepaths)
 
 
+(comment import ./utils :prefix "")
+
 
 ###########################################################################
 
-(def version "2026-01-10_03-00-46")
+(def version "2026-01-10_14-27-42")
 
 (def usage
   ``
@@ -4340,20 +4394,34 @@
     (l/noten :o version)
     (os/exit 0))
   #
-  (def src-paths
-    (s/collect-paths (get opts :includes)
-                     |(or (string/has-suffix? ".janet" $)
-                          (s/has-janet-shebang? $))))
-  (when (get opts :raw)
-    (l/clear-d-tables!))
+  (def test-sets @[])
+  (def old-dir (os/cwd))
+  (if-let [roots (get opts :roots)]
+    # if roots are specified, includes / excludes are ignored
+    (each r roots
+      (os/cd r)
+      (when (u/is-file? u/conf-file)
+        (def [includes excludes _] (u/parse-conf-file u/conf-file))
+        (when (not (empty? includes))
+          (when (not (empty? excludes))
+            (merge-into (get opts :excludes) excludes))
+          (array/push test-sets
+                      [r (s/collect-paths includes s/seems-like-janet?)])))
+      (os/cd old-dir))
+    # typical operation does not involve multiple roots
+    (array/push test-sets
+                [(os/cwd) (s/collect-paths (get opts :includes)
+                                           s/seems-like-janet?)]))
+  # turn off user-oriented output if raw output requested
+  (when (get opts :raw) (l/clear-d-tables!))
   # 0 - successful testing / updating
   # 1 - at least one test failure
   # 2 - caught error
   (def [exit-code test-results]
     (try
       (if (or (get opts :update) (get opts :update-first))
-        (c/make-run-update src-paths opts)
-        (c/make-run-report src-paths opts))
+        (c/make-run-update test-sets opts)
+        (c/make-run-report test-sets opts))
       ([e f]
         (l/noten :e)
         (if (dictionary? e)

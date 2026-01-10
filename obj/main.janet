@@ -4,6 +4,7 @@
 (import ./log :prefix "")
 (import ./output :prefix "")
 (import ./search :prefix "")
+(import ./utils :prefix "")
 
 ###########################################################################
 
@@ -84,20 +85,34 @@
     (l/noten :o version)
     (os/exit 0))
   #
-  (def src-paths
-    (s/collect-paths (get opts :includes)
-                     |(or (string/has-suffix? ".janet" $)
-                          (s/has-janet-shebang? $))))
-  (when (get opts :raw)
-    (l/clear-d-tables!))
+  (def test-sets @[])
+  (def old-dir (os/cwd))
+  (if-let [roots (get opts :roots)]
+    # if roots are specified, includes / excludes are ignored
+    (each r roots
+      (os/cd r)
+      (when (u/is-file? u/conf-file)
+        (def [includes excludes _] (u/parse-conf-file u/conf-file))
+        (when (not (empty? includes))
+          (when (not (empty? excludes))
+            (merge-into (get opts :excludes) excludes))
+          (array/push test-sets
+                      [r (s/collect-paths includes s/seems-like-janet?)])))
+      (os/cd old-dir))
+    # typical operation does not involve multiple roots
+    (array/push test-sets
+                [(os/cwd) (s/collect-paths (get opts :includes)
+                                           s/seems-like-janet?)]))
+  # turn off user-oriented output if raw output requested
+  (when (get opts :raw) (l/clear-d-tables!))
   # 0 - successful testing / updating
   # 1 - at least one test failure
   # 2 - caught error
   (def [exit-code test-results]
     (try
       (if (or (get opts :update) (get opts :update-first))
-        (c/make-run-update src-paths opts)
-        (c/make-run-report src-paths opts))
+        (c/make-run-update test-sets opts)
+        (c/make-run-report test-sets opts))
       ([e f]
         (l/noten :e)
         (if (dictionary? e)

@@ -55,6 +55,11 @@
       (and (string/find "env" first-line)
            (string/find "janet" first-line)))))
 
+(defn seems-like-janet?
+  [path]
+  (or (string/has-suffix? ".janet" path)
+      (has-janet-shebang? path)))
+
 (defn collect-paths
   [includes &opt pred]
   (default pred identity)

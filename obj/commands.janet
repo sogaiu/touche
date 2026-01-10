@@ -110,19 +110,24 @@
     (e/emf b "unexpected result %p for: %s" desc path)))
 
 (defn c/make-run-report
-  [src-paths opts]
+  [test-sets opts]
   (def excludes (get opts :excludes))
   (def noted-paths @{:parse @[] :lint @[] :run @[]
                      :pass @[] :fail @[]})
   (def test-results @[])
   # generate tests, run tests, and report
-  (each path src-paths
-    (when (and (not (has-value? excludes path)) (u/is-file? path))
-      (l/note :i path)
-      (def single-result (c/mrr-single path opts))
-      (def [_ tr] single-result)
-      (array/push test-results [path tr])
-      (c/tally-mrr-result path single-result noted-paths)))
+  (def old-dir (os/cwd))
+  (each [root src-paths] test-sets
+    (os/cd root)
+    (each path src-paths
+      (when (and (not (get excludes path))
+                 (u/is-file? path))
+        (l/note :i path)
+        (def single-result (c/mrr-single path opts))
+        (def [_ tr] single-result)
+        (array/push test-results [path tr])
+        (c/tally-mrr-result path single-result noted-paths)))
+    (os/cd old-dir))
   #
   (l/notenf :i (o/separator "="))
   (c/summarize noted-paths)
@@ -212,20 +217,27 @@
   ret)
 
 (defn c/make-run-update
-  [src-paths opts]
+  [test-sets opts]
   (def excludes (get opts :excludes))
   (def noted-paths @{:parse @[] :lint @[] :run @[]
                      :update @[]})
   (def test-results @[])
+  (var stop? nil)
   # generate tests, run tests, and update
-  (each path src-paths
-    (when (and (not (has-value? excludes path)) (u/is-file? path))
-      (def single-result (c/mru-single path opts))
-      (def [_ _ tr] single-result)
-      (array/push test-results [path tr])
-      (def ret (c/tally-mru-result path single-result noted-paths))
-      (when (= :halt ret)
-        (break))))
+  (def old-dir (os/cwd))
+  (defer (os/cd old-dir)
+    (each [root src-paths] test-sets
+      (os/cd root)
+      (each path src-paths
+        (when (and (not (get excludes path)) (u/is-file? path))
+          (def single-result (c/mru-single path opts))
+          (def [_ _ tr] single-result)
+          (array/push test-results [path tr])
+          (def ret (c/tally-mru-result path single-result noted-paths))
+          (when (= :halt ret)
+            (set stop? true)
+            (break))))
+      (when stop? (break))))
   #
   (l/notenf :i (o/separator "="))
   (c/summarize noted-paths)

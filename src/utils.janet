@@ -41,6 +41,37 @@
   #
   (= :file (os/stat path :mode)))
 
+(defn merge-indexed
+  [left right]
+  (cond
+    (and (nil? left) (nil? right)) nil
+    (nil? left) (array ;right)
+    (nil? right) (array ;left)
+    (distinct [;left ;right])))
+
+(comment
+
+  (merge-indexed nil nil)
+  # =>
+  nil
+
+  (merge-indexed [:a :b :c] nil)
+  # =>
+  @[:a :b :c]
+
+  (merge-indexed nil [1 2 3])
+  # =>
+  @[1 2 3]
+
+  (merge-indexed [:ant :bee :cat] [:bee :dog])
+  # =>
+  @[:ant :bee :cat :dog]
+
+  )
+
+# XXX: find a better home for this
+(def conf-file ".tche.jdn")
+
 (defn parse-conf-file
   [conf-file]
   (def b {:in "parse-conf-file" :args {:conf-file conf-file}})
@@ -57,6 +88,12 @@
     (when (not (dictionary? cnf))
       (e/emf b "expected dictionary in conf, got: %s" (type cnf)))
     #
+    (def roots
+      (if-let [r (get cnf :roots)]
+        (array ;r)
+        nil))
+    #
     [(array ;(get cnf :includes @[]))
-     (array ;(get cnf :excludes @[]))]))
+     (invert (get cnf :excludes @{}))
+     roots]))
 

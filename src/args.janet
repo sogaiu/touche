@@ -9,18 +9,16 @@
   #
   (def head (get the-args 0))
   #
-  (def conf-file ".tche.jdn")
-  #
   (when (or (= head "-h") (= head "--help")
             # might have been invoked with no paths in repository root
             (and (not head)
-                 (not= :file (os/stat conf-file :mode))))
+                 (not (u/is-file? u/conf-file))))
     (break @{:show-help true}))
   #
   (when (or (= head "-v") (= head "--version")
             # might have been invoked with no paths in repository root
-            (and (not head)
-                 (not= :file (os/stat conf-file :mode))))
+            (and (not head) 
+                 (not (u/is-file? u/conf-file))))
     (break @{:show-version true}))
   #
   (def opts
@@ -39,29 +37,26 @@
           parsed))
       @{}))
   #
-  (def [includes excludes]
+  (def [includes excludes roots]
     (cond
       # paths on command line take precedence over conf file
       (not (empty? the-args))
-      [the-args @[]]
+      [the-args @{} nil]
       # conf file
-      (u/is-file? conf-file)
-      (u/parse-conf-file conf-file)
+      (u/is-file? u/conf-file)
+      (u/parse-conf-file u/conf-file)
       #
       (e/emf b "unexpected result parsing args: %n" args)))
   #
   (setdyn :test/color?
           (not (or (os/getenv "NO_COLOR") (get opts :no-color))))
   #
-  (defn merge-indexed
-    [left right]
-    (default left [])
-    (default right [])
-    (distinct [;left ;right]))
-  #
   (merge opts
-         {:includes (merge-indexed includes (get opts :includes))
-          :excludes (merge-indexed excludes (get opts :excludes))}))
+         {:includes (u/merge-indexed includes (get opts :includes @[]))
+          # value of :excludes ends up as a table
+          :excludes (merge-into excludes
+                                (invert (get opts :excludes @{})))
+          :roots (u/merge-indexed roots (get opts :roots))}))
 
 (comment
 
@@ -71,8 +66,9 @@
 
   (parse-args ["src/main.janet"])
   # =>
-  @{:excludes @[]
-    :includes @["src/main.janet"]}
+  @{:excludes @{}
+    :includes @["src/main.janet"]
+    :roots nil}
 
   (parse-args ["-h"])
   # =>
@@ -80,14 +76,16 @@
 
   (parse-args ["{:overwrite true}" "src/main.janet"])
   # =>
-  @{:excludes @[]
+  @{:excludes @{}
     :includes @["src/main.janet"]
-    :overwrite true}
+    :overwrite true
+    :roots nil}
 
   (parse-args [`{:excludes ["src/args.janet"]}` "src/main.janet"])
   # =>
-  @{:excludes @["src/args.janet"]
-    :includes @["src/main.janet"]}
+  @{:excludes @{"src/args.janet" 0}
+    :includes @["src/main.janet"]
+    :roots nil}
 
   (setdyn :test/color? old-value)
 
