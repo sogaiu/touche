@@ -118,6 +118,7 @@
         (if (dictionary? e)
           (e/show e)
           (debug/stacktrace f e "internal "))
+        (l/noten :e "Processing halted.")
         [2 @[]])))
   #
   (if (get opts :raw)

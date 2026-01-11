@@ -4337,7 +4337,7 @@
 
 ###########################################################################
 
-(def version "2026-01-11_02-00-51")
+(def version "2026-01-11_03-27-23")
 
 (def usage
   ``
@@ -4447,6 +4447,7 @@
         (if (dictionary? e)
           (e/show e)
           (debug/stacktrace f e "internal "))
+        (l/noten :e "Processing halted.")
         [2 @[]])))
   #
   (if (get opts :raw)
