@@ -98,3 +98,20 @@
 
   )
 
+(comment
+
+  (when (os/stat dst-path :mode)
+    (os/rm dst-path))
+
+  (os/stat dst-path :mode)
+  # =>
+  nil
+
+  (os/rmdir tmp-dir)
+
+  (os/stat tmp-dir :mode)
+  # =>
+  nil
+
+  )
+

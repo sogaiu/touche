@@ -92,3 +92,20 @@
 
   )
 
+(comment
+
+  (each dp dst-paths
+    (os/rm dp))
+
+  (all |(nil? (os/stat $ :mode)) dst-paths)
+  # =>
+  true
+
+  (os/rmdir tmp-dir)
+
+  (os/stat tmp-dir :mode)
+  # =>
+  nil
+
+  )
+
